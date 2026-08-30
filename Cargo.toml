@@ -1,0 +1,25 @@
+[package]
+name = "eventbus"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["WyattAu"]
+description = "Async event bus for Rust — typed pub/sub with optional persistence, replay, and wildcard subscriptions"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/WyattAu/eventbus"
+keywords = ["event", "pubsub", "async", "messaging", "bus"]
+categories = ["asynchronous", "rust-patterns"]
+readme = "README.md"
+
+[dependencies]
+tokio = { version = "1", features = ["sync", "rt", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+dashmap = "6"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[features]
+default = ["in-memory"]
+in-memory = []
+persistence = []
