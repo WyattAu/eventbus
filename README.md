@@ -1,4 +1,4 @@
-# eventbus
+# typed-eventbus
 
 Async event bus for Rust — typed pub/sub with optional persistence, replay, and wildcard subscriptions.
 
