@@ -7,15 +7,18 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use eventbus::EventBus;
+//! use typed_eventbus::EventBus;
 //!
-//! let bus = EventBus::new();
+//! let rt = tokio::runtime::Runtime::new().unwrap();
+//! rt.block_on(async {
+//!     let bus = EventBus::new();
 //!
-//! bus.subscribe("orders.*", |event| {
-//!     println!("Got order event: {}", event.payload);
+//!     bus.subscribe("orders.*", |event| Box::pin(async move {
+//!         println!("Got order event: {}", event.payload);
+//!     })).await;
+//!
+//!     bus.publish("orders.created", "order #123".to_string()).await.unwrap();
 //! });
-//!
-//! bus.publish("orders.created", "order #123".to_string()).unwrap();
 //! ```
 
 /// Event bus implementation.
@@ -26,11 +29,22 @@ pub mod envelope;
 pub mod error;
 /// Event types.
 pub mod event;
+/// Persistent bus decorator.
+pub mod persistent_bus;
+/// SQLite-backed event persistence.
+#[cfg(feature = "sqlite")]
+pub mod persistence;
 /// Subscription management.
 pub mod subscription;
+/// Event store trait and implementations.
+pub mod store;
 
 pub use bus::EventBus;
 pub use envelope::EventEnvelope;
 pub use error::{EventBusError, Result};
 pub use event::{Event, TypedEvent};
+pub use persistent_bus::PersistentBus;
+pub use store::{EventStore, InMemoryStore};
+#[cfg(feature = "postgres")]
+pub use store::PostgresStore;
 pub use subscription::{topic_matches, Subscription};
