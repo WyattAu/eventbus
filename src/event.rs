@@ -1,8 +1,7 @@
 use std::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-
-
 
 /// A trait that all events must implement.
 pub trait Event: Clone + Send + Sync + fmt::Display + 'static {
@@ -10,7 +9,11 @@ pub trait Event: Clone + Send + Sync + fmt::Display + 'static {
     fn type_name(&self) -> &'static str;
 
     /// Returns the default topic for this event type.
-    fn topic(&self) -> String;
+    ///
+    /// Returns `Arc<str>` to allow zero-copy sharing across publish clones.
+    /// For ergnomic `&str` comparisons, use `&*event.topic()` or
+    /// `event.topic().as_ref()`.
+    fn topic(&self) -> Arc<str>;
 }
 
 /// A typed event that can be published on the bus.
@@ -18,13 +21,13 @@ pub trait Event: Clone + Send + Sync + fmt::Display + 'static {
 /// Wraps a payload with a topic and implements the `Event` trait.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypedEvent<T: Clone + Send + Sync + fmt::Display + 'static> {
-    topic: String,
+    topic: Arc<str>,
     payload: T,
 }
 
 impl<T: Clone + Send + Sync + fmt::Display + 'static> TypedEvent<T> {
-    /// Creates a new `TypedEvent`.
-    pub fn new(topic: impl Into<String>, payload: T) -> Self {
+    /// Creates a new `TypedEvent`. Accepts `String`, `&str`, or `Arc<str>`.
+    pub fn new(topic: impl Into<Arc<str>>, payload: T) -> Self {
         Self {
             topic: topic.into(),
             payload,
@@ -52,8 +55,8 @@ impl<T: Clone + Send + Sync + fmt::Display + 'static> Event for TypedEvent<T> {
         std::any::type_name::<T>()
     }
 
-    fn topic(&self) -> String {
-        self.topic.clone()
+    fn topic(&self) -> Arc<str> {
+        Arc::clone(&self.topic)
     }
 }
 

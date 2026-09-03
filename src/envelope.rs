@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,8 +12,10 @@ pub type EventMetadata = std::collections::HashMap<String, serde_json::Value>;
 pub struct EventEnvelope<T: Clone + Send + Sync + 'static> {
     /// Unique identifier for this event instance.
     pub id: Uuid,
-    /// The topic the event was published to.
-    pub topic: String,
+    /// The topic the event was published to. `Arc<str>` avoids cloning the topic
+    /// string on every `envelope.clone()` (one allocation per publish, then
+    /// atomic refcount bumps for each subscriber).
+    pub topic: Arc<str>,
     /// The event payload.
     pub payload: T,
     /// Timestamp when the event was created (UTC epoch millis).
@@ -23,7 +26,10 @@ pub struct EventEnvelope<T: Clone + Send + Sync + 'static> {
 
 impl<T: Clone + Send + Sync + 'static> EventEnvelope<T> {
     /// Creates a new `EventEnvelope` with a generated ID and current timestamp.
-    pub fn new(topic: impl Into<String>, payload: T) -> Self {
+    ///
+    /// `topic` accepts `String`, `&str`, `Arc<str>`, `Cow<'_, str>` etc. via
+    /// `Into<Arc<str>>` — no extra allocation when already `Arc<str>`.
+    pub fn new(topic: impl Into<Arc<str>>, payload: T) -> Self {
         Self {
             id: Uuid::new_v4(),
             topic: topic.into(),
@@ -69,7 +75,7 @@ mod tests {
         };
         let envelope = EventEnvelope::new("test.topic", payload.clone());
 
-        assert_eq!(envelope.topic, "test.topic");
+        assert_eq!(envelope.topic.as_ref(), "test.topic");
         assert_eq!(envelope.payload, payload);
         assert!(!envelope.id.is_nil());
         assert!(envelope.timestamp > 0);

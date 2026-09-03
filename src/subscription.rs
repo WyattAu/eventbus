@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -8,15 +9,16 @@ use uuid::Uuid;
 pub struct Subscription {
     /// Unique ID for this subscription.
     pub id: Uuid,
-    /// The topic pattern (supports `*` and `**` wildcards).
-    pub topic_pattern: String,
+    /// The topic pattern (supports `*` and `**` wildcards). `Arc<str>` shares
+    /// the pattern string across the DashMap entry and the Subscription handle.
+    pub topic_pattern: Arc<str>,
     /// Whether this subscription is currently active.
     pub active: bool,
 }
 
 impl Subscription {
-    /// Creates a new active subscription.
-    pub fn new(topic_pattern: impl Into<String>) -> Self {
+    /// Creates a new active subscription. Accepts `String`, `&str`, or `Arc<str>`.
+    pub fn new(topic_pattern: impl Into<Arc<str>>) -> Self {
         Self {
             id: Uuid::new_v4(),
             topic_pattern: topic_pattern.into(),

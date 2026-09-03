@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::sync::Arc;
-use criterion::{criterion_group, criterion_main, Criterion};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use typed_eventbus::EventBus;
 use typed_eventbus::subscription::topic_matches;
 
@@ -12,10 +12,13 @@ fn bench_event_bus_creation(c: &mut Criterion) {
 
 fn bench_subscribe_single(c: &mut Criterion) {
     c.bench_function("subscribe_single", |b| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
         b.iter_with_setup(
             || EventBus::<String>::new(),
             |bus| {
-                let _sub = bus.subscribe("orders.created", |_| {});
+                rt.block_on(async {
+                    let _sub = bus.subscribe_sync("orders.created", |_| {}).await;
+                });
             },
         );
     });
@@ -23,12 +26,15 @@ fn bench_subscribe_single(c: &mut Criterion) {
 
 fn bench_subscribe_multiple(c: &mut Criterion) {
     c.bench_function("subscribe_multiple", |b| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
         b.iter_with_setup(
             || {
                 let bus = EventBus::<String>::new();
-                let _s1 = bus.subscribe("orders.*", |_| {});
-                let _s2 = bus.subscribe("payments.*", |_| {});
-                let _s3 = bus.subscribe("users.*", |_| {});
+                rt.block_on(async {
+                    let _s1 = bus.subscribe_sync("orders.*", |_| {}).await;
+                    let _s2 = bus.subscribe_sync("payments.*", |_| {}).await;
+                    let _s3 = bus.subscribe_sync("users.*", |_| {}).await;
+                });
                 bus
             },
             |bus| {
@@ -39,41 +45,85 @@ fn bench_subscribe_multiple(c: &mut Criterion) {
 }
 
 fn bench_publish_single_subscriber(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
     let bus = EventBus::<String>::new();
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = counter.clone();
-    let _sub = bus.subscribe("orders.created", move |_event| {
-        counter_clone.fetch_add(1, Ordering::SeqCst);
+    rt.block_on(async {
+        bus.subscribe_sync("orders.created", move |_event| {
+            counter_clone.fetch_add(1, Ordering::SeqCst);
+        })
+        .await;
     });
 
     c.bench_function("publish_single_subscriber", |b| {
-        b.iter(|| bus.publish("orders.created", "payload".into()).unwrap());
+        b.iter(|| {
+            rt.block_on(async {
+                bus.publish("orders.created", "payload".into())
+                    .await
+                    .unwrap();
+            });
+        });
     });
 }
 
 fn bench_publish_multiple_subscribers(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
     let bus = EventBus::<String>::new();
     let counter = Arc::new(AtomicUsize::new(0));
     let c1 = counter.clone();
     let c2 = counter.clone();
     let c3 = counter.clone();
-    let _s1 = bus.subscribe("orders.*", move |_| { c1.fetch_add(1, Ordering::SeqCst); });
-    let _s2 = bus.subscribe("orders.created", move |_| { c2.fetch_add(1, Ordering::SeqCst); });
-    let _s3 = bus.subscribe("orders.*", move |_| { c3.fetch_add(1, Ordering::SeqCst); });
+    rt.block_on(async {
+        let _s1 = bus
+            .subscribe_sync("orders.*", move |_| {
+                c1.fetch_add(1, Ordering::SeqCst);
+            })
+            .await;
+        let _s2 = bus
+            .subscribe_sync("orders.created", move |_| {
+                c2.fetch_add(1, Ordering::SeqCst);
+            })
+            .await;
+        let _s3 = bus
+            .subscribe_sync("orders.*", move |_| {
+                c3.fetch_add(1, Ordering::SeqCst);
+            })
+            .await;
+    });
 
     c.bench_function("publish_multiple_subscribers", |b| {
-        b.iter(|| bus.publish("orders.created", "payload".into()).unwrap());
+        b.iter(|| {
+            rt.block_on(async {
+                bus.publish("orders.created", "payload".into())
+                    .await
+                    .unwrap();
+            });
+        });
     });
 }
 
 fn bench_publish_wildcard(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
     let bus = EventBus::<String>::new();
     let counter = Arc::new(AtomicUsize::new(0));
     let c1 = counter.clone();
-    let _sub = bus.subscribe("events.**", move |_| { c1.fetch_add(1, Ordering::SeqCst); });
+    rt.block_on(async {
+        let _sub = bus
+            .subscribe_sync("events.**", move |_| {
+                c1.fetch_add(1, Ordering::SeqCst);
+            })
+            .await;
+    });
 
     c.bench_function("publish_wildcard", |b| {
-        b.iter(|| bus.publish("events.a.b.c.d", "payload".into()).unwrap());
+        b.iter(|| {
+            rt.block_on(async {
+                bus.publish("events.a.b.c.d", "payload".into())
+                    .await
+                    .unwrap();
+            });
+        });
     });
 }
 
