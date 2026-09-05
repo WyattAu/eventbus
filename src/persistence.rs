@@ -1,9 +1,9 @@
 //! SQLite-backed event persistence.
 
 use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
-use serde::{Serialize, Deserialize};
 
 /// A persisted event stored in SQLite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,9 +36,13 @@ impl SqliteStore {
                 timestamp_ms INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_topic ON events(topic);
-            CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp_ms);"
+            CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp_ms);",
         )?;
-        let max_id: u64 = conn.query_row("SELECT COALESCE(MAX(id), 0) FROM events", [], |row| row.get(0)).unwrap_or(0);
+        let max_id: u64 = conn
+            .query_row("SELECT COALESCE(MAX(id), 0) FROM events", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(0);
         Ok(Self {
             conn: Mutex::new(conn),
             next_id: std::sync::atomic::AtomicU64::new(max_id + 1),
@@ -54,7 +58,7 @@ impl SqliteStore {
                 topic TEXT NOT NULL,
                 payload BLOB NOT NULL,
                 timestamp_ms INTEGER NOT NULL
-            );"
+            );",
         )?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -64,7 +68,9 @@ impl SqliteStore {
 
     /// Store an event and return its assigned id.
     pub fn store(&self, topic: &str, payload: &[u8]) -> Result<u64, rusqlite::Error> {
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -78,7 +84,11 @@ impl SqliteStore {
     }
 
     /// Retrieve events for a topic with a timestamp at or after `since_ms`.
-    pub fn get_events(&self, topic: &str, since_ms: u64) -> Result<Vec<PersistedEvent>, rusqlite::Error> {
+    pub fn get_events(
+        &self,
+        topic: &str,
+        since_ms: u64,
+    ) -> Result<Vec<PersistedEvent>, rusqlite::Error> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, topic, payload, timestamp_ms FROM events WHERE topic = ?1 AND timestamp_ms >= ?2 ORDER BY timestamp_ms"

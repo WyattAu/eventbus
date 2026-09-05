@@ -117,7 +117,11 @@ impl<T: Clone + Send + Sync + 'static> EventBus<T> {
     ///
     /// Each subscriber is awaited before moving to the next.
     /// Returns the number of subscribers notified.
-    pub async fn publish_sequential(&self, topic: impl Into<Arc<str>>, payload: T) -> Result<usize> {
+    pub async fn publish_sequential(
+        &self,
+        topic: impl Into<Arc<str>>,
+        payload: T,
+    ) -> Result<usize> {
         self.publish_sequential_with_metadata(topic, payload, EventMetadata::new())
             .await
     }

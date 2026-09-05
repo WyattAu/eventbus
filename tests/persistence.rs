@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use typed_eventbus::store::{EventStore, InMemoryStore};
 use typed_eventbus::{EventBus, PersistentBus};
@@ -120,7 +120,9 @@ async fn persistent_bus_topic_filtering() {
     let bus = EventBus::<String>::new();
     let pbus = PersistentBus::new(bus, store.clone());
 
-    pbus.publish("orders.created", "a".to_string()).await.unwrap();
+    pbus.publish("orders.created", "a".to_string())
+        .await
+        .unwrap();
     pbus.publish("payments.created", "b".to_string())
         .await
         .unwrap();

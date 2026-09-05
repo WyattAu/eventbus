@@ -29,22 +29,22 @@ pub mod envelope;
 pub mod error;
 /// Event types.
 pub mod event;
-/// Persistent bus decorator.
-pub mod persistent_bus;
 /// SQLite-backed event persistence.
 #[cfg(feature = "sqlite")]
 pub mod persistence;
-/// Subscription management.
-pub mod subscription;
+/// Persistent bus decorator.
+pub mod persistent_bus;
 /// Event store trait and implementations.
 pub mod store;
+/// Subscription management.
+pub mod subscription;
 
 pub use bus::EventBus;
 pub use envelope::EventEnvelope;
 pub use error::{EventBusError, Result};
 pub use event::{Event, TypedEvent};
 pub use persistent_bus::PersistentBus;
-pub use store::{EventStore, InMemoryStore};
 #[cfg(feature = "postgres")]
 pub use store::PostgresStore;
-pub use subscription::{topic_matches, Subscription};
+pub use store::{EventStore, InMemoryStore};
+pub use subscription::{Subscription, topic_matches};
