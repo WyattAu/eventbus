@@ -1,6 +1,6 @@
 [package]
 name = "eventbus-kit"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["WyattAu"]
@@ -38,3 +38,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 default = []
 postgres = ["dep:sqlx"]
 sqlite = ["dep:rusqlite"]
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"

@@ -32,7 +32,10 @@ impl<T: Clone + Send + Sync + 'static> Default for InMemoryStore<T> {
 #[async_trait]
 impl<T: Clone + Send + Sync + 'static> EventStore<T> for InMemoryStore<T> {
     async fn append(&self, envelope: &EventEnvelope<T>) -> Result<()> {
-        self.entries.lock().unwrap().push(envelope.clone());
+        self.entries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(envelope.clone());
         Ok(())
     }
 
@@ -40,7 +43,7 @@ impl<T: Clone + Send + Sync + 'static> EventStore<T> for InMemoryStore<T> {
         Ok(self
             .entries
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|e| e.timestamp >= since)
             .cloned()
@@ -51,7 +54,7 @@ impl<T: Clone + Send + Sync + 'static> EventStore<T> for InMemoryStore<T> {
         Ok(self
             .entries
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|e| topic_matches(topic_pattern, &e.topic))
             .cloned()
@@ -59,6 +62,10 @@ impl<T: Clone + Send + Sync + 'static> EventStore<T> for InMemoryStore<T> {
     }
 
     async fn load_all(&self) -> Result<Vec<EventEnvelope<T>>> {
-        Ok(self.entries.lock().unwrap().clone())
+        Ok(self
+            .entries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone())
     }
 }

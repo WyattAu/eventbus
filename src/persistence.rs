@@ -73,9 +73,9 @@ impl SqliteStore {
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_millis() as u64;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
             "INSERT INTO events (id, topic, payload, timestamp_ms) VALUES (?1, ?2, ?3, ?4)",
             params![id, topic, payload, now_ms],
@@ -89,7 +89,7 @@ impl SqliteStore {
         topic: &str,
         since_ms: u64,
     ) -> Result<Vec<PersistedEvent>, rusqlite::Error> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT id, topic, payload, timestamp_ms FROM events WHERE topic = ?1 AND timestamp_ms >= ?2 ORDER BY timestamp_ms"
         )?;
@@ -106,7 +106,7 @@ impl SqliteStore {
 
     /// Get the most recent event for a topic, if any.
     pub fn get_latest(&self, topic: &str) -> Result<Option<PersistedEvent>, rusqlite::Error> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let result = conn.query_row(
             "SELECT id, topic, payload, timestamp_ms FROM events WHERE topic = ?1 ORDER BY timestamp_ms DESC, id DESC LIMIT 1",
             params![topic],
@@ -126,7 +126,7 @@ impl SqliteStore {
 
     /// Delete events older than `before_ms`. Returns the number of deleted rows.
     pub fn cleanup(&self, before_ms: u64) -> Result<u64, rusqlite::Error> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let deleted = conn.execute(
             "DELETE FROM events WHERE timestamp_ms < ?1",
             params![before_ms],
@@ -137,6 +137,7 @@ impl SqliteStore {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

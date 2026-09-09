@@ -1,3 +1,6 @@
+// Benchmarks: unwrap is acceptable for setup assertions.
+#![allow(clippy::unwrap_used)]
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -6,21 +9,18 @@ use typed_eventbus::subscription::topic_matches;
 
 fn bench_event_bus_creation(c: &mut Criterion) {
     c.bench_function("event_bus_creation", |b| {
-        b.iter(|| EventBus::<String>::new());
+        b.iter(EventBus::<String>::new);
     });
 }
 
 fn bench_subscribe_single(c: &mut Criterion) {
     c.bench_function("subscribe_single", |b| {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        b.iter_with_setup(
-            || EventBus::<String>::new(),
-            |bus| {
-                rt.block_on(async {
-                    let _sub = bus.subscribe_sync("orders.created", |_| {}).await;
-                });
-            },
-        );
+        b.iter_with_setup(EventBus::<String>::new, |bus| {
+            rt.block_on(async {
+                let _sub = bus.subscribe_sync("orders.created", |_| {}).await;
+            });
+        });
     });
 }
 

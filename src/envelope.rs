@@ -61,6 +61,7 @@ fn chrono_now_millis() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

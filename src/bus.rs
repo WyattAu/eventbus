@@ -252,6 +252,7 @@ impl<T: Clone + Send + Sync + 'static> std::fmt::Debug for EventBus<T> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
