@@ -28,12 +28,12 @@ impl PostgresStore {
         Ok(Self { pool })
     }
 
-    /// Run the schema migration to create the `event_store` table.
+    /// Run the schema migration to create the `eventbus_store` table.
     pub async fn migrate(pool: &PgPool) -> Result<()> {
         // Each statement runs separately: Postgres prepared statements reject
         // multiple commands in a single query.
         for stmt in [
-            "CREATE TABLE IF NOT EXISTS event_store (
+            "CREATE TABLE IF NOT EXISTS eventbus_store (
                 id UUID PRIMARY KEY,
                 topic TEXT NOT NULL,
                 payload JSONB NOT NULL,
@@ -41,8 +41,8 @@ impl PostgresStore {
                 metadata JSONB NOT NULL DEFAULT '{}',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )",
-            "CREATE INDEX IF NOT EXISTS idx_event_topic ON event_store (topic)",
-            "CREATE INDEX IF NOT EXISTS idx_event_timestamp ON event_store (timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_eventbus_topic ON eventbus_store (topic)",
+            "CREATE INDEX IF NOT EXISTS idx_eventbus_timestamp ON eventbus_store (timestamp)",
         ] {
             sqlx::query(stmt)
                 .execute(pool)
@@ -65,7 +65,7 @@ where
             .map_err(|e| EventBusError::Store(format!("serialize metadata: {e}").into()))?;
 
         sqlx::query(
-            "INSERT INTO event_store (id, topic, payload, timestamp, metadata)
+            "INSERT INTO eventbus_store (id, topic, payload, timestamp, metadata)
              VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(envelope.id)
@@ -82,7 +82,7 @@ where
 
     async fn load_since(&self, since: i64) -> Result<Vec<EventEnvelope<T>>> {
         let rows: Vec<StoredEvent> = sqlx::query_as(
-            "SELECT id, topic, payload, timestamp, metadata FROM event_store
+            "SELECT id, topic, payload, timestamp, metadata FROM eventbus_store
              WHERE timestamp >= $1 ORDER BY timestamp ASC",
         )
         .bind(since)
@@ -103,7 +103,7 @@ where
 
     async fn load_all(&self) -> Result<Vec<EventEnvelope<T>>> {
         let rows: Vec<StoredEvent> = sqlx::query_as(
-            "SELECT id, topic, payload, timestamp, metadata FROM event_store ORDER BY timestamp ASC",
+            "SELECT id, topic, payload, timestamp, metadata FROM eventbus_store ORDER BY timestamp ASC",
         )
         .fetch_all(&self.pool)
         .await
