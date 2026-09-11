@@ -30,7 +30,9 @@ impl PostgresStore {
 
     /// Run the schema migration to create the `event_store` table.
     pub async fn migrate(pool: &PgPool) -> Result<()> {
-        sqlx::query(
+        // Each statement runs separately: Postgres prepared statements reject
+        // multiple commands in a single query.
+        for stmt in [
             "CREATE TABLE IF NOT EXISTS event_store (
                 id UUID PRIMARY KEY,
                 topic TEXT NOT NULL,
@@ -38,13 +40,15 @@ impl PostgresStore {
                 timestamp BIGINT NOT NULL,
                 metadata JSONB NOT NULL DEFAULT '{}',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            CREATE INDEX IF NOT EXISTS idx_event_topic ON event_store (topic);
-            CREATE INDEX IF NOT EXISTS idx_event_timestamp ON event_store (timestamp);",
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| EventBusError::Store(format!("migration: {e}").into()))?;
+            )",
+            "CREATE INDEX IF NOT EXISTS idx_event_topic ON event_store (topic)",
+            "CREATE INDEX IF NOT EXISTS idx_event_timestamp ON event_store (timestamp)",
+        ] {
+            sqlx::query(stmt)
+                .execute(pool)
+                .await
+                .map_err(|e| EventBusError::Store(format!("migration: {e}").into()))?;
+        }
         Ok(())
     }
 }
