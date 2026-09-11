@@ -1,5 +1,9 @@
 # typed-eventbus
 
+[![docs.rs](https://docs.rs/eventbus-kit/badge.svg)](https://docs.rs/eventbus-kit)
+[![crates.io](https://img.shields.io/crates/v/eventbus-kit.svg)](https://crates.io/crates/eventbus-kit)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+
 Async event bus for Rust — typed pub/sub with optional persistence, replay, and wildcard subscriptions.
 
 ## Features

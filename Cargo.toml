@@ -25,7 +25,7 @@ dashmap = "6"
 uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "json", "derive"], optional = true }
-rusqlite = { version = "0.31", features = ["bundled"], optional = true }
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
 
 [[bench]]
 name = "eventbus_bench"

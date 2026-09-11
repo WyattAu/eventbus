@@ -1,0 +1,7 @@
+[advisories]
+ignore = [
+    # rsa 0.9.x (transitive via sqlx-postgres SCRAM/RSA auth): RUSTSEC-2023-0071
+    # (Marvin Attack). No fixed release exists upstream; the affected RSA key
+    # exchange path is not used (deployments use SCRAM-SHA-256).
+    "RUSTSEC-2023-0071",
+]
