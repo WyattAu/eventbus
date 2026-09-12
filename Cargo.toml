@@ -32,7 +32,7 @@ name = "eventbus_bench"
 harness = false
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 # sqlite_store.rs: on-disk databases in a tempdir.
 tempfile = "3"
 # postgres_store.rs: a throwaway Postgres per test run (docker).
