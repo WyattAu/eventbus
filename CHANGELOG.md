@@ -2,6 +2,17 @@
 
 All notable changes are documented here.
 
+## [0.3.5] - 2026-09-12
+
+### Added
+
+- `tests/config_matrix.rs` (3 tests): behavior-observable coverage for the
+  public config knobs — `EventEnvelope::with_metadata` (metadata delivered
+  verbatim through `publish_with_metadata` and preserved through
+  `PersistentBus::replay`, with the no-metadata default contrasted) and the
+  subscription topic pattern (exact vs `*` vs `**` delivery sets on the
+  same publishes).
+
 ## [0.3.4] - 2026-09-12
 
 ### Added
