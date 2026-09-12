@@ -1,6 +1,6 @@
 [package]
 name = "eventbus-kit"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 rust-version = "1.85"
 authors = ["WyattAu"]
@@ -33,6 +33,22 @@ harness = false
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+# sqlite_store.rs: on-disk databases in a tempdir.
+tempfile = "3"
+# postgres_store.rs: a throwaway Postgres per test run (docker).
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["postgres"] }
+# PgPool handle for PostgresStore::open in tests; time sleep in tests.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"] }
+tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros", "time"] }
+
+[[test]]
+name = "sqlite_store"
+required-features = ["sqlite"]
+
+[[test]]
+name = "postgres_store"
+required-features = ["postgres"]
 
 [features]
 default = []

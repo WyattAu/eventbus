@@ -23,3 +23,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-features
+
+  # Store integration suites: sqlite fully local (tempdir), postgres
+  # against a container spun up per run via testcontainers (docker
+  # preinstalled on ubuntu-latest runners).
+  integration:
+    name: Integration (sqlite + postgres)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: sqlite store suite
+        run: cargo test --features sqlite --test sqlite_store
+      - name: postgres store suite (testcontainers)
+        run: cargo test --features postgres --test postgres_store
