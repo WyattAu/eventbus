@@ -37,7 +37,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
 # postgres_store.rs: a throwaway Postgres per test run (docker).
 testcontainers = "0.23"
-testcontainers-modules = { version = "0.11", features = ["postgres"] }
+testcontainers-modules = { version = "0.12", features = ["postgres"] }
 # PgPool handle for PostgresStore::open in tests; time sleep in tests.
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"] }
 tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros", "time"] }
