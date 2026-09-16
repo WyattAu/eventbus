@@ -51,4 +51,6 @@ jobs:
       - name: sqlite store suite
         run: cargo test --features sqlite --test sqlite_store
       - name: postgres store suite (service container)
+        env:
+          EVENTBUS_TEST_PG_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
         run: cargo test --features postgres --test postgres_store
