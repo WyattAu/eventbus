@@ -2,12 +2,17 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 #![cfg(feature = "postgres")]
 
-//! Postgres store integration tests against a real Postgres server spun up
-//! per run with testcontainers (docker required).
+//! Postgres store integration tests against a real Postgres server provided
+//! by the CI job's `services:` container (or any local Postgres).
 //!
 //! ```sh
 //! cargo test --features postgres --test postgres_store
 //! ```
+//!
+//! Connection: `EVENTBUS_TEST_PG_URL` (defaults to the CI service container
+//! at `postgres://postgres:postgres@127.0.0.1:5432/postgres`). Each test
+//! gets its own throwaway database on the shared server, mirroring the
+//! isolation the previous per-test testcontainers containers provided.
 //!
 //! Proves the full durable path on Postgres: migration, append/load via
 //! [`PostgresStore`], timestamp offsets, wildcard topic replay, and
@@ -15,24 +20,44 @@
 //! in-memory unit tests cannot exercise.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
 use typed_eventbus::store::EventStore;
 use typed_eventbus::{EventBus, EventBusError, PersistentBus, PostgresStore};
 
-async fn spawn_postgres() -> (testcontainers::ContainerAsync<Postgres>, sqlx::PgPool) {
-    let container = Postgres::default().start().await.unwrap();
-    let host = container.get_host().await.unwrap();
-    let port = container.get_host_port_ipv4(5432).await.unwrap();
-    let url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&url)
+/// Connection URL for the Postgres admin/server database.
+fn server_url() -> String {
+    std::env::var("EVENTBUS_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1:5432/postgres".to_string())
+}
+
+static DB_SEQ: AtomicU32 = AtomicU32::new(0);
+
+/// A connection pool bound to a fresh, uniquely-named database on the
+/// shared test server. Databases are left behind deliberately: the test
+/// server is ephemeral (CI service container / local docker run).
+async fn spawn_postgres() -> (String, sqlx::PgPool) {
+    let server = server_url();
+    let admin = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&server)
         .await
         .unwrap();
-    (container, pool)
+    let n = DB_SEQ.fetch_add(1, Ordering::SeqCst);
+    let db = format!("eventbus_it_{}_{}", std::process::id(), n);
+    sqlx::query(&format!(r#"CREATE DATABASE "{db}""#))
+        .execute(&admin)
+        .await
+        .unwrap();
+    admin.close().await;
+
+    let db_url = format!("{}/{}", server.rsplit_once('/').unwrap().0, db);
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .unwrap();
+    (db_url, pool)
 }
 
 // ---------------------------------------------------------------------------
@@ -41,7 +66,7 @@ async fn spawn_postgres() -> (testcontainers::ContainerAsync<Postgres>, sqlx::Pg
 
 #[tokio::test]
 async fn migrate_is_idempotent() {
-    let (_container, pool) = spawn_postgres().await;
+    let (_db_url, pool) = spawn_postgres().await;
     PostgresStore::migrate(&pool).await.unwrap();
     PostgresStore::migrate(&pool).await.unwrap();
     let n: i64 = sqlx::query_scalar(
@@ -55,7 +80,7 @@ async fn migrate_is_idempotent() {
 
 #[tokio::test]
 async fn append_and_load_roundtrip() {
-    let (_container, pool) = spawn_postgres().await;
+    let (_db_url, pool) = spawn_postgres().await;
     PostgresStore::migrate(&pool).await.unwrap();
     let store = PostgresStore::open(pool).await.unwrap();
 
@@ -73,7 +98,7 @@ async fn append_and_load_roundtrip() {
 
 #[tokio::test]
 async fn load_since_filters_by_timestamp() {
-    let (_container, pool) = spawn_postgres().await;
+    let (_db_url, pool) = spawn_postgres().await;
     PostgresStore::migrate(&pool).await.unwrap();
     let store = PostgresStore::open(pool).await.unwrap();
 
@@ -98,7 +123,7 @@ async fn load_since_filters_by_timestamp() {
 
 #[tokio::test]
 async fn load_by_topic_supports_wildcard_patterns() {
-    let (_container, pool) = spawn_postgres().await;
+    let (_db_url, pool) = spawn_postgres().await;
     PostgresStore::migrate(&pool).await.unwrap();
     let store = PostgresStore::open(pool).await.unwrap();
 
@@ -133,7 +158,7 @@ async fn load_by_topic_supports_wildcard_patterns() {
 async fn append_persists_across_pool_reconnect() {
     // A brand-new store instance over a NEW pool to the same database sees
     // previously appended events (durability on the server, not in-process).
-    let (container, pool) = spawn_postgres().await;
+    let (db_url, pool) = spawn_postgres().await;
     PostgresStore::migrate(&pool).await.unwrap();
     {
         let store = PostgresStore::open(pool.clone()).await.unwrap();
@@ -147,12 +172,9 @@ async fn append_persists_across_pool_reconnect() {
     }
     pool.close().await;
 
-    let host = container.get_host().await.unwrap();
-    let port = container.get_host_port_ipv4(5432).await.unwrap();
-    let url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
     let pool2 = sqlx::postgres::PgPoolOptions::new()
         .max_connections(2)
-        .connect(&url)
+        .connect(&db_url)
         .await
         .unwrap();
     let store2 = PostgresStore::open(pool2).await.unwrap();
@@ -163,7 +185,7 @@ async fn append_persists_across_pool_reconnect() {
 
 #[tokio::test]
 async fn store_errors_surface_as_eventbus_store_errors() {
-    let (_container, pool) = spawn_postgres().await;
+    let (_db_url, pool) = spawn_postgres().await;
     // No migration: the table does not exist — append must fail with a
     // Store error rather than panicking.
     let store = PostgresStore::open(pool).await.unwrap();
@@ -180,7 +202,7 @@ async fn store_errors_surface_as_eventbus_store_errors() {
 
 #[tokio::test]
 async fn persistent_bus_publish_consume_and_replay() {
-    let (_container, pool) = spawn_postgres().await;
+    let (_db_url, pool) = spawn_postgres().await;
     PostgresStore::migrate(&pool).await.unwrap();
     let store = Arc::new(PostgresStore::open(pool).await.unwrap());
 
@@ -234,7 +256,7 @@ async fn persistent_bus_publish_consume_and_replay() {
 
 #[tokio::test]
 async fn concurrent_publishers_persist_every_event() {
-    let (_container, pool) = spawn_postgres().await;
+    let (_db_url, pool) = spawn_postgres().await;
     PostgresStore::migrate(&pool).await.unwrap();
     let store = Arc::new(PostgresStore::open(pool).await.unwrap());
     let bus = Arc::new(PersistentBus::<String>::new(EventBus::new(), store));

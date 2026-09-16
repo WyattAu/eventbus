@@ -24,17 +24,31 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-features
 
-  # Store integration suites: sqlite fully local (tempdir), postgres
-  # against a container spun up per run via testcontainers (docker
-  # preinstalled on ubuntu-latest runners).
+  # Store integration suites: sqlite fully local (tempdir), postgres against
+  # the job's service container (fresh per run). The suite creates a unique
+  # throwaway database per test on the shared server.
   integration:
     name: Integration (sqlite + postgres)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: sqlite store suite
         run: cargo test --features sqlite --test sqlite_store
-      - name: postgres store suite (testcontainers)
+      - name: postgres store suite (service container)
         run: cargo test --features postgres --test postgres_store
