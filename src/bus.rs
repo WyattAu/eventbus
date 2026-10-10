@@ -5,8 +5,10 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use uuid::Uuid;
 
+use crate::backpressure::{DeliveryReport, Enqueue, OverflowPolicy, SubscriberStats};
 use crate::envelope::{EventEnvelope, EventMetadata};
 use crate::error::Result;
+use crate::queue::{BoundedQueue, spawn_worker};
 use crate::subscription::Subscription;
 
 /// An async callback that handles events. Envelope is shared via `Arc` to avoid
@@ -19,9 +21,60 @@ pub struct EventBus<T: Clone + Send + Sync + 'static> {
     subscriptions: DashMap<Uuid, SubscriptionEntry<T>>,
 }
 
+/// How a subscriber receives envelopes.
+///
+/// `Awaited` is the original behaviour: the publisher spawns the callback and
+/// waits for it, so publisher latency is the slowest subscriber's latency.
+/// `Bounded` keeps the same callbacks but hands them a queue with a worker,
+/// which decouples the two.
+#[derive(Clone)]
+enum Delivery<T: Clone + Send + Sync + 'static> {
+    Awaited(EventCallback<T>),
+    Bounded(Arc<BoundedQueue<T>>),
+}
+
 struct SubscriptionEntry<T: Clone + Send + Sync + 'static> {
     subscription: Subscription,
-    callback: EventCallback<T>,
+    delivery: Delivery<T>,
+}
+
+/// Fans an envelope out according to each subscriber's delivery mode.
+///
+/// `Awaited` subscribers are spawned and awaited together, preserving the
+/// existing publish contract; `Bounded` subscribers are enqueued and never
+/// waited on. Returns the number of matching subscribers.
+async fn dispatch<T: Clone + Send + Sync + 'static>(
+    deliveries: Vec<Delivery<T>>,
+    envelope: &Arc<EventEnvelope<T>>,
+    sequential: bool,
+) -> usize {
+    let mut handles = Vec::new();
+    let mut notified = 0;
+
+    for delivery in deliveries {
+        match delivery {
+            Delivery::Awaited(callback) => {
+                notified += 1;
+                if sequential {
+                    callback(Arc::clone(envelope)).await;
+                } else {
+                    let env = Arc::clone(envelope);
+                    handles.push(tokio::spawn(async move {
+                        callback(env).await;
+                    }));
+                }
+            }
+            Delivery::Bounded(queue) => {
+                notified += 1;
+                queue.push(Arc::clone(envelope));
+            }
+        }
+    }
+
+    for handle in handles {
+        let _ = handle.await;
+    }
+    notified
 }
 
 impl<T: Clone + Send + Sync + 'static> EventBus<T> {
@@ -59,28 +112,8 @@ impl<T: Clone + Send + Sync + 'static> EventBus<T> {
             metadata,
         });
 
-        let matching: Vec<EventCallback<T>> = self
-            .subscriptions
-            .iter()
-            .filter(|entry| entry.value().subscription.matches(&envelope.topic))
-            .map(|entry| Arc::clone(&entry.value().callback))
-            .collect();
-
-        let notified = matching.len();
-        let mut handles = Vec::with_capacity(notified);
-
-        for callback in matching {
-            let env = Arc::clone(&envelope);
-            handles.push(tokio::spawn(async move {
-                (callback)(env).await;
-            }));
-        }
-
-        for handle in handles {
-            let _ = handle.await;
-        }
-
-        Ok(notified)
+        let matching = self.matching_deliveries(&envelope.topic);
+        Ok(dispatch(matching, &envelope, false).await)
     }
 
     /// Publishes a pre-built envelope to all matching subscribers concurrently.
@@ -89,28 +122,8 @@ impl<T: Clone + Send + Sync + 'static> EventBus<T> {
     pub async fn publish_with_envelope(&self, envelope: EventEnvelope<T>) -> Result<usize> {
         let envelope = Arc::new(envelope);
 
-        let matching: Vec<EventCallback<T>> = self
-            .subscriptions
-            .iter()
-            .filter(|entry| entry.value().subscription.matches(&envelope.topic))
-            .map(|entry| Arc::clone(&entry.value().callback))
-            .collect();
-
-        let notified = matching.len();
-        let mut handles = Vec::with_capacity(notified);
-
-        for callback in matching {
-            let env = Arc::clone(&envelope);
-            handles.push(tokio::spawn(async move {
-                (callback)(env).await;
-            }));
-        }
-
-        for handle in handles {
-            let _ = handle.await;
-        }
-
-        Ok(notified)
+        let matching = self.matching_deliveries(&envelope.topic);
+        Ok(dispatch(matching, &envelope, false).await)
     }
 
     /// Publishes an event to all matching subscribers sequentially.
@@ -144,20 +157,8 @@ impl<T: Clone + Send + Sync + 'static> EventBus<T> {
             metadata,
         });
 
-        let matching: Vec<EventCallback<T>> = self
-            .subscriptions
-            .iter()
-            .filter(|entry| entry.value().subscription.matches(&envelope.topic))
-            .map(|entry| Arc::clone(&entry.value().callback))
-            .collect();
-
-        let notified = matching.len();
-
-        for callback in matching {
-            (callback)(Arc::clone(&envelope)).await;
-        }
-
-        Ok(notified)
+        let matching = self.matching_deliveries(&envelope.topic);
+        Ok(dispatch(matching, &envelope, true).await)
     }
 
     /// Subscribes to a topic pattern with an async callback.
@@ -178,7 +179,7 @@ impl<T: Clone + Send + Sync + 'static> EventBus<T> {
             sub_id,
             SubscriptionEntry {
                 subscription: subscription.clone(),
-                callback: Arc::new(callback),
+                delivery: Delivery::Awaited(Arc::new(callback)),
             },
         );
 
@@ -201,10 +202,10 @@ impl<T: Clone + Send + Sync + 'static> EventBus<T> {
             sub_id,
             SubscriptionEntry {
                 subscription: subscription.clone(),
-                callback: Arc::new(move |env| {
+                delivery: Delivery::Awaited(Arc::new(move |env| {
                     callback(env);
                     Box::pin(async {})
-                }),
+                })),
             },
         );
 
@@ -215,12 +216,136 @@ impl<T: Clone + Send + Sync + 'static> EventBus<T> {
     ///
     /// Returns true if the subscription was found and removed.
     pub fn unsubscribe(&self, subscription_id: Uuid) -> bool {
-        if let Some(mut entry) = self.subscriptions.remove(&subscription_id) {
-            entry.1.subscription.deactivate();
+        if let Some((_, mut entry)) = self.subscriptions.remove(&subscription_id) {
+            entry.subscription.deactivate();
+            if let Delivery::Bounded(queue) = &entry.delivery {
+                queue.close();
+            }
             true
         } else {
             false
         }
+    }
+
+    /// Subscribes with a bounded queue so the publisher is never blocked.
+    ///
+    /// Unlike [`Self::subscribe`], a slow callback cannot slow the publisher
+    /// down: the envelope goes into a queue of at most `capacity` items and a
+    /// worker drains it. What happens when the queue is full is decided by
+    /// `policy`, not by whichever subscriber happens to be slowest.
+    ///
+    /// Use [`Self::stats`] to watch the queue depth, drops, and panics.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use typed_eventbus::{EventBus, OverflowPolicy};
+    /// # async fn run() {
+    /// let bus: EventBus<String> = EventBus::new();
+    /// bus.subscribe_bounded("orders.**", 128, OverflowPolicy::DropOldest, |event| {
+    ///     Box::pin(async move { let _ = event.payload; })
+    /// })
+    /// .await;
+    /// # }
+    /// ```
+    pub async fn subscribe_bounded(
+        &self,
+        topic_pattern: impl Into<Arc<str>>,
+        capacity: usize,
+        policy: OverflowPolicy,
+        callback: impl Fn(Arc<EventEnvelope<T>>) -> Pin<Box<dyn Future<Output = ()> + Send>>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Subscription {
+        let subscription = Subscription::new(topic_pattern);
+        let stats = Arc::new(SubscriberStats::new());
+        let queue = Arc::new(BoundedQueue::new(capacity, policy, Arc::clone(&stats)));
+
+        self.subscriptions.insert(
+            subscription.id,
+            SubscriptionEntry {
+                subscription: subscription.clone(),
+                delivery: Delivery::Bounded(Arc::clone(&queue)),
+            },
+        );
+        spawn_worker(queue, Arc::new(callback));
+        subscription
+    }
+
+    /// Counters for a bounded subscriber.
+    ///
+    /// Returns `None` for an unknown id or for a subscriber registered with
+    /// [`Self::subscribe`], which has no queue.
+    #[must_use]
+    pub fn stats(&self, subscription_id: uuid::Uuid) -> Option<Arc<SubscriberStats>> {
+        let entry = self.subscriptions.get(&subscription_id)?;
+        match &entry.delivery {
+            Delivery::Bounded(queue) => Some(queue.stats()),
+            Delivery::Awaited(_) => None,
+        }
+    }
+
+    /// Publishes and reports exactly what each subscriber's queue did.
+    ///
+    /// [`Self::publish`] reports only how many subscribers matched. Use this
+    /// when the producer needs to know whether anything was lost — the
+    /// difference between a producer that reacts and one that discovers the
+    /// backlog later, in a consumer's queue depth.
+    pub async fn publish_report(
+        &self,
+        topic: impl Into<Arc<str>>,
+        payload: T,
+    ) -> Result<DeliveryReport> {
+        self.publish_report_with_metadata(topic, payload, EventMetadata::new())
+            .await
+    }
+
+    /// Publishes with custom metadata and reports delivery outcomes.
+    pub async fn publish_report_with_metadata(
+        &self,
+        topic: impl Into<Arc<str>>,
+        payload: T,
+        metadata: EventMetadata,
+    ) -> Result<DeliveryReport> {
+        let envelope = Arc::new(EventEnvelope {
+            id: Uuid::new_v4(),
+            topic: topic.into(),
+            payload,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64,
+            metadata,
+        });
+
+        let mut report = DeliveryReport::default();
+        for delivery in self.matching_deliveries(&envelope.topic) {
+            report.matched += 1;
+            match delivery {
+                Delivery::Bounded(queue) => match queue.push(Arc::clone(&envelope)) {
+                    Enqueue::Delivered => report.enqueued += 1,
+                    Enqueue::DroppedOldest | Enqueue::DroppedNewest => report.dropped += 1,
+                    Enqueue::Rejected => report.rejected += 1,
+                },
+                Delivery::Awaited(callback) => {
+                    // Must actually deliver: reporting a subscriber as
+                    // enqueued that never received the envelope would be a
+                    // silent drop wearing a success report.
+                    callback(Arc::clone(&envelope)).await;
+                    report.enqueued += 1;
+                }
+            }
+        }
+        Ok(report)
+    }
+
+    fn matching_deliveries(&self, topic: &str) -> Vec<Delivery<T>> {
+        self.subscriptions
+            .iter()
+            .filter(|entry| entry.value().subscription.matches(topic))
+            .map(|entry| entry.value().delivery.clone())
+            .collect()
     }
 
     /// Returns the number of active subscriptions.

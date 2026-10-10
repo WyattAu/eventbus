@@ -21,6 +21,8 @@
 //! });
 //! ```
 
+/// Bounded-queue delivery primitives.
+pub mod backpressure;
 /// Event bus implementation.
 pub mod bus;
 /// Event envelope type.
@@ -34,11 +36,13 @@ pub mod event;
 pub mod persistence;
 /// Persistent bus decorator.
 pub mod persistent_bus;
+mod queue;
 /// Event store trait and implementations.
 pub mod store;
 /// Subscription management.
 pub mod subscription;
 
+pub use backpressure::{DeliveryReport, Enqueue, OverflowPolicy, SubscriberStats};
 pub use bus::EventBus;
 pub use envelope::EventEnvelope;
 pub use error::{EventBusError, Result};
