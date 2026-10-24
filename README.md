@@ -1,4 +1,5 @@
 # typed-eventbus
+[![Estate integration](https://github.com/WyattAu/estate-integration/actions/workflows/ci.yml/badge.svg)](https://github.com/WyattAu/estate-integration/actions/workflows/ci.yml)
 
 [![docs.rs](https://docs.rs/eventbus-kit/badge.svg)](https://docs.rs/eventbus-kit)
 [![crates.io](https://img.shields.io/crates/v/eventbus-kit.svg)](https://crates.io/crates/eventbus-kit)
