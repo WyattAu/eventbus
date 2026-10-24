@@ -1,10 +1,10 @@
 [package]
 name = "eventbus-kit"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["WyattAu"]
-description = "Async event bus for Rust — typed pub/sub with optional persistence, replay, and wildcard subscriptions"
+description = "Async event bus for Rust: typed pub/sub with optional persistence, replay, and wildcard subscriptions"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/WyattAu/eventbus"
 keywords = ["event", "pubsub", "async", "messaging", "bus"]
