@@ -129,6 +129,14 @@ let event = TypedEvent::new("orders.created", OrderCreated {
 bus.publish(event.topic().clone(), event.into_payload()).unwrap();
 ```
 
+## Stability
+
+`eventbus-kit` is 1.0. Breaking changes require a minor bump and a
+`#[deprecated]` window of at least one minor release; MSRV bumps are minor
+releases, never patch releases. `missing_docs` is denied and `unsafe` is
+forbidden. Store backends may graduate from tests to shipped features in
+minors.
+
 ## License
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.

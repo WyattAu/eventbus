@@ -1,6 +1,26 @@
 # Changelog
 
-All notable changes are documented here.
+All notable changes are documented here. Versions follow
+[semver](https://semver.org).
+
+## [1.0.0] - 2026-10-25
+
+### Declared stable
+
+First 1.0. `eventbus-kit` routes production events; this release commits the
+typed event registry, subscription, and dispatch surfaces as API-stable.
+
+### Guarantees from here on
+
+- Breaking changes to public items require a minor bump plus a `#[deprecated]`
+  window of at least one minor release.
+- MSRV bumps are minor releases, not patch releases.
+- `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]` are enforced.
+
+### Explicitly not guaranteed
+
+- New store backends (sqlite, postgres) may graduate from tests to shipped
+  features in minors.
 
 ## [0.4.0] - 2026-10-10
 
