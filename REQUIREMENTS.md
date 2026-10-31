@@ -1,9 +1,9 @@
-# Requirements — eventbus
+# Requirements: eventbus
 
 Numbered, testable requirements. Every requirement maps to at least one named
 test or doc-comment contract; security-relevant items cite THREAT-MODEL.md rows.
 
-Scope: Durable event bus — in-memory topic fan-out with optional Postgres/SQLite persistence
+Scope: Durable event bus; in-memory topic fan-out with optional Postgres/SQLite persistence
 
 ## Functional
 

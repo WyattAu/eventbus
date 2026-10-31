@@ -35,7 +35,7 @@ typed event registry, subscription, and dispatch surfaces as API-stable.
   does is now an explicit per-subscriber decision instead of an emergent
   consequence of load. Defaults to `DropOldest`.
 - `SubscriberStats` via `EventBus::stats`: queue depth, delivered, dropped,
-  rejected, and panicked counters. Queue depth is the early signal — a
+  rejected, and panicked counters. Queue depth is the early signal; a
   backlog that stays above zero under sustained publishing means the
   callback cannot keep up, well before `dropped` proves data was lost.
 - `EventBus::publish_report` / `publish_report_with_metadata`, returning
@@ -61,7 +61,7 @@ typed event registry, subscription, and dispatch surfaces as API-stable.
 ### Added
 
 - `tests/config_matrix.rs` (3 tests): behavior-observable coverage for the
-  public config knobs — `EventEnvelope::with_metadata` (metadata delivered
+  public config knobs; `EventEnvelope::with_metadata` (metadata delivered
   verbatim through `publish_with_metadata` and preserved through
   `PersistentBus::replay`, with the no-metadata default contrasted) and the
   subscription topic pattern (exact vs `*` vs `**` delivery sets on the
@@ -100,7 +100,7 @@ typed event registry, subscription, and dispatch surfaces as API-stable.
 
 
 All notable changes to this project are documented here. Format: [Keep a
-Changelog](https://keepachangelog.com/) — versions follow [semver](https://semver.org).
+Changelog](https://keepachangelog.com/); versions follow [semver](https://semver.org).
 
 ## [0.2.0] - 2026-09-05
 

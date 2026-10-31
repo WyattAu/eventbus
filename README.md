@@ -5,18 +5,18 @@
 [![crates.io](https://img.shields.io/crates/v/eventbus-kit.svg)](https://crates.io/crates/eventbus-kit)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 
-Async event bus for Rust — typed pub/sub with optional persistence, replay, and wildcard subscriptions.
+Async event bus for Rust; typed pub/sub with optional persistence, replay, and wildcard subscriptions.
 
 ## Features
 
-- **Typed events** — Generic `EventBus<T>` for type-safe payloads
-- **Wildcard subscriptions** — `*` matches one segment, `**` matches multiple
-- **DashMap-backed** — Lock-free concurrent reads and writes
-- **Bounded delivery** — Per-subscriber queues with an explicit overflow
+- **Typed events**; Generic `EventBus<T>` for type-safe payloads
+- **Wildcard subscriptions**; `*` matches one segment, `**` matches multiple
+- **DashMap-backed**; Lock-free concurrent reads and writes
+- **Bounded delivery**; Per-subscriber queues with an explicit overflow
   policy, so a slow consumer cannot slow the publisher down
-- **Observable** — Queue depth, drops, rejections, and panics per subscriber
-- **Metadata support** — Attach arbitrary JSON metadata to events
-- **Zero allocation topics** — Efficient pattern matching on `&str`
+- **Observable**; Queue depth, drops, rejections, and panics per subscriber
+- **Metadata support**; Attach arbitrary JSON metadata to events
+- **Zero allocation topics**; Efficient pattern matching on `&str`
 
 ## Quick Start
 
@@ -79,7 +79,7 @@ let stats = bus.stats(sub.id).unwrap();
 println!("depth {} dropped {}", stats.queue_depth(), stats.dropped());
 ```
 
-A `DropOldest` subscriber is a legitimate consumer to run — but if
+A `DropOldest` subscriber is a legitimate consumer to run; but if
 `queue_depth` sits above zero under steady load, that subscriber cannot
 keep up, and `dropped` is already counting real losses. Both are exported
 as plain counters so they can be scraped as metrics.
